@@ -1,7 +1,10 @@
 // Lab 7: Chrono-Solver -- LamportClock and MessageQueue starter.
 package clocks
 
-import "sync"
+import (
+	"sort"
+	"sync"
+)
 
 // LamportClock is a single node's logical clock.
 type LamportClock struct {
@@ -12,16 +15,27 @@ type LamportClock struct {
 // Tick increments the clock (a local event) and returns the new value.
 // Must be safe for concurrent use.
 func (c *LamportClock) Tick() int {
-	// TODO
-	panic("Tick not implemented")
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.value++
+	return c.value
+
 }
 
 // Observe handles receiving a message stamped with `received`: sets
 // the clock to max(current, received) + 1 and returns the new value.
 // Must be safe for concurrent use.
 func (c *LamportClock) Observe(received int) int {
-	// TODO
-	panic("Observe not implemented")
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if received > c.value {
+		c.value = received
+	}
+	c.value++
+	return c.value
+
 }
 
 // LogEvent is a single timestamped event arriving from some node.
@@ -53,6 +67,18 @@ func (q *MessageQueue) Enqueue(event LogEvent) {
 // distinguish concurrent events from causally-ordered ones, see Part
 // A, Question 3).
 func (q *MessageQueue) Drain() []LogEvent {
-	// TODO
-	panic("Drain not implemented")
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	out := make([]LogEvent, len(q.events))
+	copy(out, q.events)
+	q.events = nil
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Timestamp != out[j].Timestamp {
+			return out[i].Timestamp < out[j].Timestamp
+		}
+		return out[i].NodeID < out[j].NodeID
+	})
+	return out
+
 }

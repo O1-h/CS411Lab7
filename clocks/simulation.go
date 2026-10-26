@@ -36,17 +36,21 @@ func RunSimulation(nodeIDs []string, eventsPerNode int) *MessageQueue {
 		}(id, index)
 	}
 	sends.Wait()
-	for _, id := range nodeIDs { close(inboxes[id]) }
+	for _, id := range nodeIDs {
+		close(inboxes[id])
+	}
 	var receives sync.WaitGroup
 	for _, id := range nodeIDs {
 		receives.Add(1)
 		go func(id string) {
 			defer receives.Done()
 			for msg := range inboxes[id] {
-				// TODO: call clocks[id].Observe(msg.timestamp), then enqueue
+				// DONE NOW-OLDTODO: call clocks[id].Observe(msg.timestamp), then enqueue
 				// LogEvent{NodeID:id, Timestamp:receiveTS,
 				// Payload:"receive:"+msg.payload}.
-				_ = msg
+				receiveTS := clocks[id].Observe(msg.timestamp)
+				queue.Enqueue(LogEvent{NodeID: id, Timestamp: receiveTS, Payload: "receive:" + msg.payload})
+
 			}
 		}(id)
 	}
@@ -56,19 +60,24 @@ func RunSimulation(nodeIDs []string, eventsPerNode int) *MessageQueue {
 
 func runNode(selfID string, index int, allNodeIDs []string, eventsPerNode int, clock *LamportClock, inboxes map[string]chan wireMessage, queue *MessageQueue) {
 	for i := 0; i < eventsPerNode; i++ {
-		// TODO: this is a LOCAL event. Call clock.Tick() and Enqueue a
+		// DONE NOW-OLDTODO: this is a LOCAL event. Call clock.Tick() and Enqueue a
 		// LogEvent with the resulting timestamp, NodeID=selfID, and a
 		// payload like "local-work".
+		localTS := clock.Tick()
+		queue.Enqueue(LogEvent{NodeID: selfID, Timestamp: localTS, Payload: "local-work"})
 
 		if len(allNodeIDs) > 1 {
 			target := allNodeIDs[(index+i+1)%len(allNodeIDs)]
-			if target == selfID { target = allNodeIDs[(index+i+2)%len(allNodeIDs)] }
+			if target == selfID {
+				target = allNodeIDs[(index+i+2)%len(allNodeIDs)]
+			}
 			messageID := selfID + "-" + target + "-" + string(rune('A'+i))
 			// TODO: this is a SEND event. Call clock.Tick() to get the
 			// timestamp to attach to the outgoing message, Enqueue a
 			// LogEvent{NodeID:selfID, Timestamp:sendTS,
 			// Payload:"send:"+messageID}, then deliver the same sendTS.
-			sendTS := 0 // TODO: replace with clock.Tick()
+			sendTS := clock.Tick()
+			queue.Enqueue(LogEvent{NodeID: selfID, Timestamp: sendTS, Payload: "send:" + messageID})
 			inboxes[target] <- wireMessage{fromNodeID: selfID, timestamp: sendTS, payload: messageID}
 		}
 	}
